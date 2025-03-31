@@ -1,6 +1,12 @@
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { db } from "../../firebase/config";
+import { doc, setDoc } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
 export default function RegistroCliente() {
+  const { signup } = useAuth();
+  const navigate = useNavigate();
   const [cliente, setCliente] = useState({
     nombres: "",
     apellidos: "",
@@ -15,12 +21,27 @@ export default function RegistroCliente() {
     setCliente({ ...cliente, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(cliente);
+    try {
+      const res = await signup(cliente.correo, cliente.password);
 
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    alert("Cliente registrado (simulado)!");
+      await setDoc(doc(db, "usuarios", res.user.uid), {
+        nombres: cliente.nombres,
+        apellidos: cliente.apellidos,
+        telefono: cliente.telefono,
+        correo: cliente.correo,
+        direccion: cliente.direccion,
+        dui: cliente.dui,
+        rol: "cliente",
+      });
+
+      alert("¡Cliente registrado exitosamente!");
+      navigate("/login");
+    } catch (error) {
+      console.error("Error al registrar cliente:", error);
+      alert("Hubo un error al registrar. Revisa los datos.");
+    }
   };
 
   return (
@@ -36,7 +57,7 @@ export default function RegistroCliente() {
           placeholder="Nombres"
           value={cliente.nombres}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
           type="text"
@@ -44,15 +65,15 @@ export default function RegistroCliente() {
           placeholder="Apellidos"
           value={cliente.apellidos}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
-          type="text"
+          type="tel"
           name="telefono"
           placeholder="Teléfono"
           value={cliente.telefono}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
           type="email"
@@ -60,7 +81,7 @@ export default function RegistroCliente() {
           placeholder="Correo electrónico"
           value={cliente.correo}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
           type="text"
@@ -68,15 +89,15 @@ export default function RegistroCliente() {
           placeholder="Dirección"
           value={cliente.direccion}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
           type="text"
           name="dui"
-          placeholder="Número de DUI"
+          placeholder="DUI"
           value={cliente.dui}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
         <input
           type="password"
@@ -84,10 +105,13 @@ export default function RegistroCliente() {
           placeholder="Contraseña"
           value={cliente.password}
           onChange={handleChange}
-          className="border w-full p-2 rounded"
+          required
         />
-        <button type="submit" className="bg-blue-500 text-white w-full p-2 rounded">
-          Registrar
+        <button
+          type="submit"
+          className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+        >
+          Registrarse
         </button>
       </form>
     </div>

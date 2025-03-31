@@ -1,42 +1,51 @@
+import BotonDeLogout from "../../components/BotonDeLogout";
 import { useState } from "react";
+import { db } from "../../firebase/config";
+import { collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
 
 export default function CanjeCupon() {
   const [codigo, setCodigo] = useState("");
   const [infoCupon, setInfoCupon] = useState(null);
 
-  const handleBuscar = () => {
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    // Simular buscar cupón
-    const cuponEjemplo = {
-      codigo: "EMP001-1234567",
-      oferta: "Descuento 50% en Pizza",
-      estado: "Disponible",
-      duiCliente: "12345678-9",
-    };
+  const handleBuscar = async () => {
+    try {
+      const cuponesRef = collection(db, "cupones");
+      const q = query(cuponesRef, where("codigo", "==", codigo));
+      const querySnapshot = await getDocs(q);
 
-    if (codigo === "EMP001-1234567") {
-      setInfoCupon(cuponEjemplo);
-    } else {
-      alert("Cupón no encontrado");
-      setInfoCupon(null);
+      if (!querySnapshot.empty) {
+        const cuponDoc = querySnapshot.docs[0];
+        setInfoCupon({ id: cuponDoc.id, ...cuponDoc.data() });
+      } else {
+        alert("Cupón no encontrado");
+        setInfoCupon(null);
+      }
+    } catch (error) {
+      console.error("Error al buscar cupón:", error);
+      alert("Error al buscar cupón");
     }
   };
 
-  const handleCanjear = () => {
+  const handleCanjear = async () => {
     if (!infoCupon || infoCupon.estado !== "Disponible") {
       alert("Este cupón no está disponible para canje");
       return;
     }
 
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    alert("Cupón canjeado exitosamente (simulado)");
-
-    // Simular actualización
-    setInfoCupon({ ...infoCupon, estado: "Canjeado" });
+    try {
+      const cuponRef = doc(db, "cupones", infoCupon.id);
+      await updateDoc(cuponRef, { estado: "Canjeado" });
+      alert("Cupón canjeado exitosamente ✅");
+      setInfoCupon({ ...infoCupon, estado: "Canjeado" });
+    } catch (error) {
+      console.error("Error al canjear cupón:", error);
+      alert("Error al canjear el cupón ❌");
+    }
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <BotonDeLogout />
       <h1 className="text-2xl mb-6">Canje de Cupones</h1>
 
       <div className="bg-white p-6 rounded shadow-md w-96">
