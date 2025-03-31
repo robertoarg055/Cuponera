@@ -1,4 +1,17 @@
+import BotonDeLogout from "../../components/BotonDeLogout";
 import { useState, useEffect } from "react";
+import { db, auth } from "../../firebase/config";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  setDoc,
+  query,
+  where,
+  updateDoc
+} from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function DashboardAdmin() {
   const [empresas, setEmpresas] = useState([]);
@@ -16,59 +29,188 @@ export default function DashboardAdmin() {
   const [rubros, setRubros] = useState([]);
   const [nuevoRubro, setNuevoRubro] = useState("");
 
-  const [clientes, setClientes] = useState([]);
+  const [ofertasPendientes, setOfertasPendientes] = useState([]);
+
+  const [nuevoUsuario, setNuevoUsuario] = useState({
+    correo: "",
+    password: "",
+    nombre: "",
+    rol: "empresa",
+    empresaAsociada: "",
+  });
+
+  const obtenerEmpresas = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "empresas"));
+      const listaEmpresas = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setEmpresas(listaEmpresas);
+    } catch (error) {
+      console.error("Error al obtener empresas:", error);
+    }
+  };
+
+  const obtenerRubros = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "rubros"));
+      const listaRubros = querySnapshot.docs.map((doc) => doc.data().nombre);
+      setRubros(listaRubros);
+    } catch (error) {
+      console.error("Error al obtener rubros:", error);
+    }
+  };
+
+  const obtenerOfertasPendientes = async () => {
+    try {
+      const q = query(collection(db, "ofertas"), where("estado", "==", "pendiente"));
+      const querySnapshot = await getDocs(q);
+      const lista = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOfertasPendientes(lista);
+    } catch (error) {
+      console.error("Error al obtener ofertas pendientes:", error);
+    }
+  };
 
   useEffect(() => {
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    // Simular obtener datos
-    const empresasEjemplo = [
-      { id: 1, nombre: "Empresa X", codigo: "EMP001", rubro: "Restaurante" },
-    ];
-    const rubrosEjemplo = ["Restaurante", "Taller", "Salón"];
-    const clientesEjemplo = [
-      { id: 1, nombres: "Juan Pérez", cupones: 3 },
-      { id: 2, nombres: "Ana Gómez", cupones: 2 },
-    ];
-
-    setEmpresas(empresasEjemplo);
-    setRubros(rubrosEjemplo);
-    setClientes(clientesEjemplo);
+    obtenerEmpresas();
+    obtenerRubros();
+    obtenerOfertasPendientes();
   }, []);
 
   const handleChangeEmpresa = (e) => {
     setNuevaEmpresa({ ...nuevaEmpresa, [e.target.name]: e.target.value });
   };
 
-  const handleCrearEmpresa = (e) => {
+  const handleCrearEmpresa = async (e) => {
     e.preventDefault();
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    console.log(nuevaEmpresa);
-    alert("Empresa registrada (simulada)");
+    try {
+      await addDoc(collection(db, "empresas"), {
+        ...nuevaEmpresa,
+        fechaRegistro: new Date()
+      });
 
-    // Reset formulario
-    setNuevaEmpresa({
-      nombre: "",
-      codigo: "",
-      direccion: "",
-      contacto: "",
-      telefono: "",
-      correo: "",
-      rubro: "",
-      porcentajeComision: "",
-    });
+      alert("Empresa registrada exitosamente ✅");
+
+      setNuevaEmpresa({
+        nombre: "",
+        codigo: "",
+        direccion: "",
+        contacto: "",
+        telefono: "",
+        correo: "",
+        rubro: "",
+        porcentajeComision: "",
+      });
+
+      obtenerEmpresas();
+    } catch (error) {
+      console.error("Error al registrar la empresa:", error);
+      alert("Ocurrió un error al registrar la empresa ❌");
+    }
   };
 
-  const handleAgregarRubro = (e) => {
+  const handleAgregarRubro = async (e) => {
     e.preventDefault();
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    alert(`Rubro agregado (simulado): ${nuevoRubro}`);
-    setRubros([...rubros, nuevoRubro]);
-    setNuevoRubro("");
+    try {
+      const nuevoDoc = doc(collection(db, "rubros"));
+      await setDoc(nuevoDoc, {
+        nombre: nuevoRubro,
+      });
+
+      alert("Rubro agregado correctamente ✅");
+      setNuevoRubro("");
+      obtenerRubros();
+    } catch (error) {
+      console.error("Error al agregar rubro:", error);
+      alert("Hubo un error al agregar el rubro ❌");
+    }
+  };
+
+  const handleChangeUsuario = (e) => {
+    setNuevoUsuario({ ...nuevoUsuario, [e.target.name]: e.target.value });
+  };
+
+  const handleCrearUsuario = async (e) => {
+    e.preventDefault();
+
+    try {
+      const res = await createUserWithEmailAndPassword(
+        auth,
+        nuevoUsuario.correo,
+        nuevoUsuario.password
+      );
+
+      let empresaId = null;
+
+      if (nuevoUsuario.rol === "empresa") {
+        const querySnapshot = await getDocs(collection(db, "empresas"));
+        const empresaCoincidente = querySnapshot.docs.find(
+          (doc) => doc.data().correo === nuevoUsuario.correo
+        );
+
+        if (empresaCoincidente) {
+          empresaId = empresaCoincidente.id;
+        }
+      }
+
+      await setDoc(doc(db, "usuarios", res.user.uid), {
+        correo: nuevoUsuario.correo,
+        nombre: nuevoUsuario.nombre,
+        rol: nuevoUsuario.rol,
+        empresaAsociada:
+          nuevoUsuario.rol === "empleado"
+            ? nuevoUsuario.empresaAsociada
+            : null,
+        empresaId: empresaId,
+      });
+
+      alert("Usuario registrado exitosamente ✅");
+      setNuevoUsuario({
+        correo: "",
+        password: "",
+        nombre: "",
+        rol: "empresa",
+        empresaAsociada: "",
+      });
+    } catch (error) {
+      console.error("Error al registrar usuario:", error);
+      alert("Error al registrar usuario ❌");
+    }
+  };
+
+  const actualizarEstadoOferta = async (idOferta, nuevoEstado) => {
+    try {
+      const ofertaRef = doc(db, "ofertas", idOferta);
+      await updateDoc(ofertaRef, { estado: nuevoEstado });
+      alert(`Oferta ${nuevoEstado} ✅`);
+      obtenerOfertasPendientes();
+    } catch (error) {
+      console.error("Error al actualizar estado de la oferta:", error);
+    }
   };
 
   return (
     <div className="p-8">
+      <BotonDeLogout />
       <h1 className="text-2xl mb-6">Dashboard Administrador</h1>
+
+      {/* Revisión de Ofertas Pendientes */}
+      <h2 className="text-xl mb-4">Ofertas Pendientes</h2>
+      <ul className="space-y-4 mb-10">
+        {ofertasPendientes.map(oferta => (
+          <li key={oferta.id} className="border p-4 rounded shadow-md">
+            <h3 className="font-bold">{oferta.titulo}</h3>
+            <p>{oferta.descripcion}</p>
+            <p><strong>Empresa ID:</strong> {oferta.empresaId}</p>
+            <div className="flex gap-4 mt-2">
+              <button onClick={() => actualizarEstadoOferta(oferta.id, "aprobada")} className="bg-green-500 text-white px-3 py-1 rounded">Aprobar</button>
+              <button onClick={() => actualizarEstadoOferta(oferta.id, "rechazada")} className="bg-red-500 text-white px-3 py-1 rounded">Rechazar</button>
+            </div>
+          </li>
+        ))}
+      </ul>
 
       {/* Gestión de Empresas */}
       <h2 className="text-xl mb-4">Gestión de Empresas</h2>
@@ -90,7 +232,12 @@ export default function DashboardAdmin() {
         <input type="text" name="contacto" placeholder="Nombre contacto" value={nuevaEmpresa.contacto} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" />
         <input type="text" name="telefono" placeholder="Teléfono" value={nuevaEmpresa.telefono} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" />
         <input type="email" name="correo" placeholder="Correo" value={nuevaEmpresa.correo} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" />
-        <input type="text" name="rubro" placeholder="Rubro" value={nuevaEmpresa.rubro} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" />
+        <select name="rubro" value={nuevaEmpresa.rubro} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" required>
+          <option value="">Seleccionar rubro</option>
+          {rubros.map((rubro, idx) => (
+            <option key={idx} value={rubro}>{rubro}</option>
+          ))}
+        </select>
         <input type="number" name="porcentajeComision" placeholder="% Comisión" value={nuevaEmpresa.porcentajeComision} onChange={handleChangeEmpresa} className="border w-full p-2 rounded" />
         <button type="submit" className="bg-blue-500 text-white w-full p-2 rounded">Registrar Empresa</button>
       </form>
@@ -108,15 +255,34 @@ export default function DashboardAdmin() {
         <button type="submit" className="bg-blue-500 text-white w-full p-2 rounded">Agregar Rubro</button>
       </form>
 
-      {/* Visualización de Clientes */}
-      <h2 className="text-xl mb-4">Clientes Registrados</h2>
-      <ul className="space-y-2">
-        {clientes.map((cliente) => (
-          <li key={cliente.id} className="border p-4 rounded">
-            <p><strong>{cliente.nombres}</strong> - Cupones comprados: {cliente.cupones}</p>
-          </li>
-        ))}
-      </ul>
+      {/* Registro de Usuarios (Empresa/Empleado) */}
+      <h2 className="text-xl mb-4">Registrar Usuario Empresa o Empleado</h2>
+      <form onSubmit={handleCrearUsuario} className="space-y-3 bg-white p-6 rounded shadow-md max-w-md mb-10">
+        <input type="email" name="correo" placeholder="Correo" value={nuevoUsuario.correo} onChange={handleChangeUsuario} className="border w-full p-2 rounded" required />
+        <input type="password" name="password" placeholder="Contraseña" value={nuevoUsuario.password} onChange={handleChangeUsuario} className="border w-full p-2 rounded" required />
+        <input type="text" name="nombre" placeholder="Nombre o Contacto" value={nuevoUsuario.nombre} onChange={handleChangeUsuario} className="border w-full p-2 rounded" required />
+
+        <select name="rol" value={nuevoUsuario.rol} onChange={handleChangeUsuario} className="border w-full p-2 rounded">
+          <option value="empresa">Empresa</option>
+          <option value="empleado">Empleado</option>
+        </select>
+
+        {nuevoUsuario.rol === "empleado" && (
+          <input
+            type="text"
+            name="empresaAsociada"
+            placeholder="Código de Empresa Asociada"
+            value={nuevoUsuario.empresaAsociada}
+            onChange={handleChangeUsuario}
+            className="border w-full p-2 rounded"
+            required
+          />
+        )}
+
+        <button type="submit" className="bg-green-500 text-white w-full p-2 rounded">
+          Registrar Usuario
+        </button>
+      </form>
     </div>
   );
 }

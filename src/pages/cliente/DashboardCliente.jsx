@@ -1,35 +1,97 @@
+import BotonDeLogout from "../../components/BotonDeLogout";
 import { useState, useEffect } from "react";
+import { db } from "../../firebase/config";
+import { useAuth } from "../../context/AuthContext";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  Timestamp,
+} from "firebase/firestore";
+import jsPDF from "jspdf";
 
 export default function DashboardCliente() {
+  const { user } = useAuth();
   const [ofertas, setOfertas] = useState([]);
   const [misCupones, setMisCupones] = useState([]);
 
   useEffect(() => {
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    // Simular obtener ofertas aprobadas
-    const ofertasEjemplo = [
-      { id: 1, titulo: "Descuento 50% en Pizza", precioOferta: 5, descripcion: "Válido hasta fin de mes." },
-      { id: 2, titulo: "2x1 en Café", precioOferta: 3, descripcion: "Café premium." },
-    ];
-    setOfertas(ofertasEjemplo);
+    const obtenerOfertas = async () => {
+      try {
+        const q = query(collection(db, "ofertas"), where("estado", "==", "aprobada"));
+        const querySnapshot = await getDocs(q);
+        const lista = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setOfertas(lista);
+      } catch (error) {
+        console.error("Error al obtener ofertas:", error);
+      }
+    };
 
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    // Simular obtener cupones del cliente
-    const cuponesEjemplo = [
-      { id: 101, codigo: "EMP001-1234567", estado: "Disponible", oferta: "Descuento 50% en Pizza" },
-      { id: 102, codigo: "EMP002-7654321", estado: "Canjeado", oferta: "2x1 en Café" },
-    ];
-    setMisCupones(cuponesEjemplo);
-  }, []);
+    const obtenerCupones = async () => {
+      try {
+        if (!user) return;
+        const q = query(collection(db, "cupones"), where("clienteId", "==", user.uid));
+        const querySnapshot = await getDocs(q);
+        const lista = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMisCupones(lista);
+      } catch (error) {
+        console.error("Error al obtener cupones:", error);
+      }
+    };
 
-  const handleComprar = (oferta) => {
-    // *En esta sección se cambia por la conexión a la base de datos que vamos a ocupar*
-    alert(`Compra simulada: ${oferta.titulo}`);
-    // Aquí generarías el código único y agregarías el cupón al cliente en la base
+    obtenerOfertas();
+    obtenerCupones();
+  }, [user]);
+
+  const generarCodigoCupon = (codigoEmpresa) => {
+    const random = Math.floor(1000000 + Math.random() * 9000000);
+    return `${codigoEmpresa}-${random}`;
+  };
+
+  const handleComprar = async (oferta) => {
+    try {
+      if (!user) return alert("Debes iniciar sesión.");
+
+      const codigo = generarCodigoCupon(oferta.codigoEmpresa || "EMPXXX");
+
+      await addDoc(collection(db, "cupones"), {
+        clienteId: user.uid,
+        codigo,
+        oferta: oferta.titulo,
+        estado: "Disponible",
+        fechaCompra: Timestamp.now(),
+        duiCliente: "N/A",
+      });
+
+      alert("¡Compra realizada exitosamente! ✅");
+
+      const q = query(collection(db, "cupones"), where("clienteId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      const lista = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMisCupones(lista);
+    } catch (error) {
+      console.error("Error al comprar cupón:", error);
+      alert("Error al realizar la compra ❌");
+    }
+  };
+
+  const handleDescargarPDF = (cupon) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Cupón de Descuento", 20, 20);
+    doc.setFontSize(12);
+    doc.text(`Oferta: ${cupon.oferta}`, 20, 40);
+    doc.text(`Código: ${cupon.codigo}`, 20, 50);
+    doc.text(`Estado: ${cupon.estado}`, 20, 60);
+    doc.text("Gracias por tu compra.", 20, 80);
+    doc.save(`cupon-${cupon.codigo}.pdf`);
   };
 
   return (
     <div className="p-8">
+      <BotonDeLogout />
       <h1 className="text-2xl mb-6">Bienvenido, Cliente</h1>
 
       {/* Ofertas disponibles */}
@@ -59,10 +121,12 @@ export default function DashboardCliente() {
             <p><strong>Código:</strong> {cupon.codigo}</p>
             <p><strong>Estado:</strong> {cupon.estado}</p>
             {cupon.estado === "Disponible" && (
-              <button className="bg-green-500 text-white mt-2 p-2 rounded">
+              <button
+                onClick={() => handleDescargarPDF(cupon)}
+                className="bg-green-500 text-white mt-2 p-2 rounded"
+              >
                 Descargar PDF
               </button>
-              // *En esta sección se cambia por generación y descarga de PDF*
             )}
           </li>
         ))}
