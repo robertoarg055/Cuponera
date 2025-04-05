@@ -16,6 +16,7 @@ export default function DashboardCliente() {
   const { user } = useAuth();
   const [ofertas, setOfertas] = useState([]);
   const [misCupones, setMisCupones] = useState([]);
+  const [duis, setDuis] = useState({});
 
   useEffect(() => {
     const obtenerOfertas = async () => {
@@ -50,9 +51,19 @@ export default function DashboardCliente() {
     return `${codigoEmpresa}-${random}`;
   };
 
+  const handleChangeDui = (ofertaId, value) => {
+    setDuis({ ...duis, [ofertaId]: value });
+  };
+
   const handleComprar = async (oferta) => {
     try {
       if (!user) return alert("Debes iniciar sesión.");
+
+      const dui = duis[oferta.id];
+      if (!dui || dui.trim() === "") {
+        alert("Por favor ingresa tu número de DUI para comprar.");
+        return;
+      }
 
       const codigo = generarCodigoCupon(oferta.codigoEmpresa || "EMPXXX");
 
@@ -62,10 +73,12 @@ export default function DashboardCliente() {
         oferta: oferta.titulo,
         estado: "Disponible",
         fechaCompra: Timestamp.now(),
-        duiCliente: "N/A",
+        duiCliente: dui.trim(),
       });
 
       alert("¡Compra realizada exitosamente! ✅");
+
+      setDuis((prev) => ({ ...prev, [oferta.id]: "" }));
 
       const q = query(collection(db, "cupones"), where("clienteId", "==", user.uid));
       const querySnapshot = await getDocs(q);
@@ -89,6 +102,8 @@ export default function DashboardCliente() {
     doc.save(`cupon-${cupon.codigo}.pdf`);
   };
 
+  const hoy = new Date();
+
   return (
     <div className="p-8">
       <BotonDeLogout />
@@ -97,19 +112,41 @@ export default function DashboardCliente() {
       {/* Ofertas disponibles */}
       <h2 className="text-xl mb-4">Ofertas Disponibles</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {ofertas.map((oferta) => (
-          <div key={oferta.id} className="border p-4 rounded shadow-md">
-            <h3 className="font-bold">{oferta.titulo}</h3>
-            <p className="text-sm">{oferta.descripcion}</p>
-            <p className="mt-2 mb-2">Precio Oferta: ${oferta.precioOferta}</p>
-            <button
-              onClick={() => handleComprar(oferta)}
-              className="bg-blue-500 text-white w-full p-2 rounded"
-            >
-              Comprar Cupón
-            </button>
-          </div>
-        ))}
+        {ofertas.map((oferta) => {
+          const fechaFin = oferta.fechaFin?.toDate?.();
+          const ofertaExpirada = fechaFin && fechaFin < hoy;
+
+          return (
+            <div key={oferta.id} className="border p-4 rounded shadow-md">
+              <h3 className="font-bold">{oferta.titulo}</h3>
+              <p className="text-sm">{oferta.descripcion}</p>
+              <p className="mt-2">Precio Oferta: ${oferta.precioOferta}</p>
+              <p className="text-sm text-gray-600 mb-2">
+                Fecha límite para comprar:{" "}
+                {fechaFin ? fechaFin.toLocaleDateString() : "No definida"}
+              </p>
+
+              <input
+                type="text"
+                placeholder="Tu número de DUI"
+                value={duis[oferta.id] || ""}
+                onChange={(e) => handleChangeDui(oferta.id, e.target.value)}
+                className="border w-full p-2 mb-2 rounded"
+              />
+
+              {ofertaExpirada ? (
+                <p className="text-red-500 font-semibold">⛔ Oferta expirada</p>
+              ) : (
+                <button
+                  onClick={() => handleComprar(oferta)}
+                  className="bg-blue-500 text-white w-full p-2 rounded mt-2"
+                >
+                  Comprar Cupón
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Cupones comprados */}

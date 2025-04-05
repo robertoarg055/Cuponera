@@ -1,10 +1,20 @@
 import BotonDeLogout from "../../components/BotonDeLogout";
 import { useState } from "react";
 import { db } from "../../firebase/config";
-import { collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import { useAuth } from "../../context/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
 
 export default function CanjeCupon() {
+  const { user } = useAuth();
   const [codigo, setCodigo] = useState("");
+  const [duiIngresado, setDuiIngresado] = useState("");
   const [infoCupon, setInfoCupon] = useState(null);
 
   const handleBuscar = async () => {
@@ -32,9 +42,24 @@ export default function CanjeCupon() {
       return;
     }
 
+    if (!duiIngresado.trim()) {
+      alert("Debe ingresar el DUI del cliente para canjear el cupón");
+      return;
+    }
+
+    if (duiIngresado !== infoCupon.duiCliente) {
+      alert("El DUI ingresado no coincide con el del cupón ❌");
+      return;
+    }
+
     try {
       const cuponRef = doc(db, "cupones", infoCupon.id);
-      await updateDoc(cuponRef, { estado: "Canjeado" });
+      await updateDoc(cuponRef, {
+        estado: "Canjeado",
+        canjeadoPor: user.uid,
+        fechaCanje: new Date(),
+      });
+
       alert("Cupón canjeado exitosamente ✅");
       setInfoCupon({ ...infoCupon, estado: "Canjeado" });
     } catch (error) {
@@ -56,7 +81,10 @@ export default function CanjeCupon() {
           onChange={(e) => setCodigo(e.target.value)}
           className="border w-full p-2 mb-4 rounded"
         />
-        <button onClick={handleBuscar} className="bg-blue-500 text-white w-full p-2 rounded mb-4">
+        <button
+          onClick={handleBuscar}
+          className="bg-blue-500 text-white w-full p-2 rounded mb-4"
+        >
           Buscar Cupón
         </button>
 
@@ -67,8 +95,19 @@ export default function CanjeCupon() {
             <p><strong>Estado:</strong> {infoCupon.estado}</p>
             <p><strong>DUI Cliente:</strong> {infoCupon.duiCliente}</p>
 
+            <input
+              type="text"
+              placeholder="Ingresar DUI del cliente"
+              value={duiIngresado}
+              onChange={(e) => setDuiIngresado(e.target.value)}
+              className="border w-full p-2 rounded mt-4"
+            />
+
             {infoCupon.estado === "Disponible" && (
-              <button onClick={handleCanjear} className="bg-green-500 text-white w-full p-2 rounded mt-4">
+              <button
+                onClick={handleCanjear}
+                className="bg-green-500 text-white w-full p-2 rounded mt-4"
+              >
                 Canjear Cupón
               </button>
             )}
